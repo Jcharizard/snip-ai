@@ -1,0 +1,59 @@
+/* Content Script Styles */
+
+/* Prevent any existing styles from interfering */
+#ai-snip-overlay * {
+    box-sizing: border-box;
+}
+
+/* Selection box animations */
+#ai-snip-selection {
+    transition: all 0.1s ease;
+}
+
+/* Instructions fade animation */
+#ai-snip-instructions {
+    transition: opacity 0.5s ease;
+}
+
+/* Success/Error message animations */
+#ai-snip-success,
+#ai-snip-error {
+    animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -60%);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, -50%);
+    }
+}
+
+/* Button hover effects */
+#ai-snip-success button:hover,
+#ai-snip-error button:hover {
+    opacity: 0.8;
+    transform: translateY(-1px);
+}
+
+/* Scrollbar styling for answer window */
+#ai-snip-success::-webkit-scrollbar {
+    width: 6px;
+}
+
+#ai-snip-success::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+#ai-snip-success::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+}
+
+#ai-snip-success::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}

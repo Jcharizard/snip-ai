@@ -1,0 +1,50 @@
+{
+  "name": "ai-snip",
+  "version": "1.0.0",
+  "description": "A Chrome extension that captures screenshots and provides instant AI-powered answers using OpenAI's GPT-4 Vision model.",
+  "main": "background.js",
+  "scripts": {
+    "build": "echo 'No build process needed for Chrome extension'",
+    "test": "echo 'No tests specified'",
+    "lint": "echo 'No linter configured'",
+    "dev": "echo 'Load extension in Chrome with Developer mode enabled'"
+  },
+  "keywords": [
+    "chrome-extension",
+    "ai",
+    "openai",
+    "screenshot",
+    "gpt-4",
+    "vision",
+    "productivity",
+    "education",
+    "homework-help"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/ai-snip.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/ai-snip/issues"
+  },
+  "homepage": "https://github.com/yourusername/ai-snip#readme",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "devDependencies": {},
+  "dependencies": {},
+  "manifest": {
+    "version": 3,
+    "permissions": [
+      "activeTab",
+      "storage",
+      "clipboardWrite",
+      "scripting"
+    ],
+    "host_permissions": [
+      "https://api.openai.com/*"
+    ]
+  }
+}
