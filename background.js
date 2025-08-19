@@ -35,25 +35,112 @@ class AISnipBackground {
 
     async getCurrentTab() {
         try {
-            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            console.log('Getting current tab...');
+            
+            // Method 1: Try to get the current active tab
+            let tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+            console.log('Found tabs (method 1):', tabs);
+            
+            if (!tabs || tabs.length === 0) {
+                // Method 2: Try to get any visible tab
+                tabs = await chrome.tabs.query({ active: true });
+                console.log('Found tabs (method 2):', tabs);
+            }
+            
+            if (!tabs || tabs.length === 0) {
+                // Method 3: Get the first tab in the current window
+                const windows = await chrome.windows.getCurrent();
+                tabs = await chrome.tabs.query({ windowId: windows.id, active: true });
+                console.log('Found tabs (method 3):', tabs);
+            }
+            
+            if (!tabs || tabs.length === 0) {
+                // Method 4: Get any tab in the current window
+                const windows = await chrome.windows.getCurrent();
+                tabs = await chrome.tabs.query({ windowId: windows.id });
+                console.log('Found tabs (method 4):', tabs);
+            }
+            
+            if (!tabs || tabs.length === 0) {
+                throw new Error('No tabs found in any method');
+            }
+            
+            // Find the first tab that's not a chrome:// or extension:// URL
+            let tab = tabs.find(t => !t.url.startsWith('chrome://') && !t.url.startsWith('chrome-extension://'));
+            if (!tab) {
+                tab = tabs[0]; // Use the first tab if no suitable tab found
+            }
+            
+            console.log('Selected tab:', tab);
+            
+            if (!tab || !tab.id) {
+                throw new Error('Invalid tab object - missing id');
+            }
+            
+            if (!tab.windowId) {
+                throw new Error('Invalid tab object - missing windowId');
+            }
+            
             return tab;
         } catch (error) {
             console.error('Error getting current tab:', error);
-            throw new Error('Could not get current tab');
+            throw new Error(`Could not get current tab: ${error.message}`);
+        }
+    }
+
+    async testTabAccess() {
+        try {
+            console.log('Testing tab access...');
+            
+            // Test 1: Get all tabs
+            const allTabs = await chrome.tabs.query({});
+            console.log('All tabs:', allTabs);
+            
+            // Test 2: Get current window
+            const currentWindow = await chrome.windows.getCurrent();
+            console.log('Current window:', currentWindow);
+            
+            // Test 3: Get tabs in current window
+            const windowTabs = await chrome.tabs.query({ windowId: currentWindow.id });
+            console.log('Window tabs:', windowTabs);
+            
+            return {
+                success: true,
+                allTabsCount: allTabs.length,
+                windowTabsCount: windowTabs.length,
+                currentWindow: currentWindow
+            };
+        } catch (error) {
+            console.error('Tab access test failed:', error);
+            return {
+                success: false,
+                error: error.message
+            };
         }
     }
 
     async handleMessage(request, sender, sendResponse) {
         try {
+            console.log('Received message:', request.action, 'from sender:', sender);
+            
             switch (request.action) {
+                case 'testTabAccess':
+                    const testResult = await this.testTabAccess();
+                    sendResponse(testResult);
+                    break;
+                    
                 case 'startScreenshot':
+                    console.log('Starting screenshot process...');
                     const currentTab = await this.getCurrentTab();
+                    console.log('Got current tab for screenshot:', currentTab);
                     await this.startScreenshot(currentTab);
                     sendResponse({ success: true });
                     break;
 
                 case 'takeFullTabScreenshot':
+                    console.log('Starting full tab screenshot process...');
                     const tab = await this.getCurrentTab();
+                    console.log('Got current tab for full screenshot:', tab);
                     const result = await this.takeFullTabScreenshot(tab);
                     sendResponse(result);
                     break;

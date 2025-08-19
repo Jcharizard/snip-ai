@@ -32,6 +32,15 @@ class AISnipPopup {
                 this.saveApiKey();
             }
         });
+
+        // Test button (for debugging)
+        const testBtn = document.createElement('button');
+        testBtn.textContent = 'Test Tab Access';
+        testBtn.style.cssText = 'background: #ffc107; color: #000; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; margin-top: 10px; width: 100%;';
+        testBtn.addEventListener('click', () => {
+            this.testTabAccess();
+        });
+        document.querySelector('.settings-section').appendChild(testBtn);
     }
 
     async loadSettings() {
@@ -399,6 +408,25 @@ class AISnipPopup {
                 }
             }, 300);
         }, 3000);
+    }
+
+    async testTabAccess() {
+        try {
+            console.log('Testing tab access from popup...');
+            const response = await chrome.runtime.sendMessage({
+                action: 'testTabAccess'
+            });
+            console.log('Tab access test result:', response);
+            
+            if (response.success) {
+                this.showNotification(`Tab access test successful! Found ${response.allTabsCount} total tabs, ${response.windowTabsCount} in current window.`, 'success');
+            } else {
+                this.showNotification('Tab access test failed: ' + response.error, 'error');
+            }
+        } catch (error) {
+            console.error('Error testing tab access:', error);
+            this.showNotification('Tab access test error: ' + error.message, 'error');
+        }
     }
 }
 
