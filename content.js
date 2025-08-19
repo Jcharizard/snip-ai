@@ -19,6 +19,11 @@ class AISnipContent {
 
     setupMessageListeners() {
         chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+            if (request.action === 'ping') {
+                sendResponse({ success: true });
+                return;
+            }
+            
             if (request.action === 'startSelectionMode') {
                 this.startSelectionMode();
                 sendResponse({ success: true });

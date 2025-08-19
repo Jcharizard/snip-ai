@@ -33,16 +33,28 @@ class AISnipBackground {
         });
     }
 
+    async getCurrentTab() {
+        try {
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            return tab;
+        } catch (error) {
+            console.error('Error getting current tab:', error);
+            throw new Error('Could not get current tab');
+        }
+    }
+
     async handleMessage(request, sender, sendResponse) {
         try {
             switch (request.action) {
                 case 'startScreenshot':
-                    await this.startScreenshot(sender.tab);
+                    const currentTab = await this.getCurrentTab();
+                    await this.startScreenshot(currentTab);
                     sendResponse({ success: true });
                     break;
 
                 case 'takeFullTabScreenshot':
-                    const result = await this.takeFullTabScreenshot(sender.tab);
+                    const tab = await this.getCurrentTab();
+                    const result = await this.takeFullTabScreenshot(tab);
                     sendResponse(result);
                     break;
 
@@ -52,7 +64,8 @@ class AISnipBackground {
                     break;
 
                 case 'captureSelection':
-                    const capture = await this.captureSelection(request.selection, sender.tab);
+                    const activeTab = await this.getCurrentTab();
+                    const capture = await this.captureSelection(request.selection, activeTab);
                     sendResponse(capture);
                     break;
 
@@ -67,23 +80,47 @@ class AISnipBackground {
 
     async startScreenshot(tab) {
         try {
-            // Inject content script to enable selection mode
-            await chrome.scripting.executeScript({
-                target: { tabId: tab.id },
-                files: ['content.js']
-            });
+            if (!tab || !tab.id) {
+                throw new Error('Invalid tab information');
+            }
+
+            console.log('Starting screenshot for tab:', tab.id);
+
+            // Check if content script is already injected
+            try {
+                await chrome.tabs.sendMessage(tab.id, { action: 'ping' });
+                console.log('Content script already injected');
+            } catch (error) {
+                console.log('Content script not found, injecting...');
+                // Inject content script to enable selection mode
+                await chrome.scripting.executeScript({
+                    target: { tabId: tab.id },
+                    files: ['content.js']
+                });
+                console.log('Content script injected successfully');
+            }
+
+            // Wait a moment for the script to initialize
+            await new Promise(resolve => setTimeout(resolve, 100));
 
             // Send message to content script to start selection mode
             await chrome.tabs.sendMessage(tab.id, {
                 action: 'startSelectionMode'
             });
+            
+            console.log('Selection mode started successfully');
         } catch (error) {
             console.error('Error starting screenshot:', error);
+            throw error;
         }
     }
 
     async takeFullTabScreenshot(tab) {
         try {
+            if (!tab || !tab.windowId) {
+                throw new Error('Invalid tab information');
+            }
+
             const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, {
                 format: 'png',
                 quality: 100
@@ -104,6 +141,10 @@ class AISnipBackground {
 
     async captureSelection(selection, tab) {
         try {
+            if (!tab || !tab.windowId) {
+                throw new Error('Invalid tab information');
+            }
+
             // Take full tab screenshot first
             const fullScreenshot = await chrome.tabs.captureVisibleTab(tab.windowId, {
                 format: 'png',

@@ -69,17 +69,17 @@ class AISnipPopup {
 
     async startScreenshot() {
         try {
-            // Close popup and start screenshot mode
-            window.close();
-            
             // Send message to background script to start screenshot
             await chrome.runtime.sendMessage({
                 action: 'startScreenshot',
                 mode: 'selection'
             });
+            
+            // Close popup after successful message send
+            window.close();
         } catch (error) {
             console.error('Error starting screenshot:', error);
-            this.showNotification('Failed to start screenshot', 'error');
+            this.showNotification('Failed to start screenshot: ' + error.message, 'error');
         }
     }
 
@@ -87,12 +87,16 @@ class AISnipPopup {
         try {
             this.showStatus('Taking full tab screenshot...');
             
+            console.log('Sending takeFullTabScreenshot message...');
+            
             // Send message to background script
             const response = await chrome.runtime.sendMessage({
                 action: 'takeFullTabScreenshot'
             });
 
-            if (response.success) {
+            console.log('Received response:', response);
+
+            if (response && response.success) {
                 this.hideStatus();
                 this.showNotification('Screenshot captured!', 'success');
                 
@@ -106,12 +110,13 @@ class AISnipPopup {
                 this.showScreenshot(response.dataUrl);
             } else {
                 this.hideStatus();
-                this.showNotification('Failed to capture screenshot', 'error');
+                const errorMsg = response ? response.error : 'Unknown error occurred';
+                this.showNotification('Failed to capture screenshot: ' + errorMsg, 'error');
             }
         } catch (error) {
             console.error('Error taking full tab screenshot:', error);
             this.hideStatus();
-            this.showNotification('Failed to capture screenshot', 'error');
+            this.showNotification('Failed to capture screenshot: ' + error.message, 'error');
         }
     }
 
