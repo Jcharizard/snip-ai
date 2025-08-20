@@ -68,6 +68,11 @@ class AISnipBackground {
             // Find the first tab that's not a chrome:// or extension:// URL
             let tab = tabs.find(t => !t.url.startsWith('chrome://') && !t.url.startsWith('chrome-extension://'));
             if (!tab) {
+                // If we're on a restricted page, provide a helpful error
+                const currentTab = tabs[0];
+                if (currentTab && (currentTab.url.startsWith('chrome://') || currentTab.url.startsWith('chrome-extension://'))) {
+                    throw new Error('Cannot take screenshots on Chrome system pages. Please navigate to a regular website (like google.com) and try again.');
+                }
                 tab = tabs[0]; // Use the first tab if no suitable tab found
             }
             

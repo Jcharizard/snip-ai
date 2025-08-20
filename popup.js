@@ -33,14 +33,21 @@ class AISnipPopup {
             }
         });
 
-        // Test button (for debugging)
+        // Test button (for debugging) - Fix the selector
         const testBtn = document.createElement('button');
         testBtn.textContent = 'Test Tab Access';
         testBtn.style.cssText = 'background: #ffc107; color: #000; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; margin-top: 10px; width: 100%;';
         testBtn.addEventListener('click', () => {
             this.testTabAccess();
         });
-        document.querySelector('.settings-section').appendChild(testBtn);
+        
+        // Fix: Use the correct selector
+        const settingsSection = document.querySelector('.settings');
+        if (settingsSection) {
+            settingsSection.appendChild(testBtn);
+        } else {
+            console.error('Settings section not found');
+        }
     }
 
     async loadSettings() {
@@ -78,6 +85,13 @@ class AISnipPopup {
 
     async startScreenshot() {
         try {
+            // Check if we're on a valid page first
+            const tabCheck = await this.checkCurrentTab();
+            if (!tabCheck.valid) {
+                this.showNotification(tabCheck.error, 'error');
+                return;
+            }
+            
             // Send message to background script to start screenshot
             await chrome.runtime.sendMessage({
                 action: 'startScreenshot',
@@ -94,6 +108,13 @@ class AISnipPopup {
 
     async takeFullTabScreenshot() {
         try {
+            // Check if we're on a valid page first
+            const tabCheck = await this.checkCurrentTab();
+            if (!tabCheck.valid) {
+                this.showNotification(tabCheck.error, 'error');
+                return;
+            }
+            
             this.showStatus('Taking full tab screenshot...');
             
             console.log('Sending takeFullTabScreenshot message...');
@@ -426,6 +447,39 @@ class AISnipPopup {
         } catch (error) {
             console.error('Error testing tab access:', error);
             this.showNotification('Tab access test error: ' + error.message, 'error');
+        }
+    }
+
+    async checkCurrentTab() {
+        try {
+            const response = await chrome.runtime.sendMessage({
+                action: 'testTabAccess'
+            });
+            
+            if (response.success) {
+                // Check if we're on a restricted page
+                const currentTab = await chrome.tabs.query({ active: true, currentWindow: true });
+                if (currentTab && currentTab[0]) {
+                    const url = currentTab[0].url;
+                    if (url.startsWith('chrome://') || url.startsWith('chrome-extension://')) {
+                        return {
+                            valid: false,
+                            error: 'Cannot take screenshots on Chrome system pages. Please navigate to a regular website (like google.com) and try again.'
+                        };
+                    }
+                }
+                return { valid: true };
+            } else {
+                return {
+                    valid: false,
+                    error: 'Cannot access browser tabs. Please make sure the extension has proper permissions.'
+                };
+            }
+        } catch (error) {
+            return {
+                valid: false,
+                error: 'Failed to check current tab: ' + error.message
+            };
         }
     }
 }
