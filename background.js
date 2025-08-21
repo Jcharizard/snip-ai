@@ -1,3 +1,7 @@
+// Simple test to see if background script loads
+console.log('=== BACKGROUND SCRIPT LOADING ===');
+console.log('Background script file loaded successfully');
+
 // Background Service Worker - Handles core extension functionality
 
 class AISnipBackground {
@@ -362,21 +366,35 @@ class AISnipBackground {
 
 // Initialize background service worker
 console.log('Initializing AISnipBackground...');
-new AISnipBackground();
-console.log('AISnipBackground initialized successfully');
+try {
+    new AISnipBackground();
+    console.log('AISnipBackground initialized successfully');
+} catch (error) {
+    console.error('Failed to initialize AISnipBackground:', error);
+}
 
 // Handle extension installation
-chrome.runtime.onInstalled.addListener((details) => {
-    if (details.reason === 'install') {
-        // Open welcome page or show instructions
-        chrome.tabs.create({
-            url: chrome.runtime.getURL('welcome.html')
-        });
-    }
-});
+try {
+    chrome.runtime.onInstalled.addListener((details) => {
+        if (details.reason === 'install') {
+            // Open welcome page or show instructions
+            chrome.tabs.create({
+                url: chrome.runtime.getURL('welcome.html')
+            });
+        }
+    });
+    console.log('Extension installation listener set up');
+} catch (error) {
+    console.error('Failed to set up installation listener:', error);
+}
 
 // Handle extension icon click
-chrome.action.onClicked.addListener((tab) => {
-    // This will open the popup automatically due to manifest configuration
-    // But we can add additional logic here if needed
-});
+try {
+    chrome.action.onClicked.addListener((tab) => {
+        // This will open the popup automatically due to manifest configuration
+        // But we can add additional logic here if needed
+    });
+    console.log('Extension icon click listener set up');
+} catch (error) {
+    console.error('Failed to set up icon click listener:', error);
+}
