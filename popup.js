@@ -434,15 +434,17 @@ class AISnipPopup {
     async testTabAccess() {
         try {
             console.log('Testing tab access from popup...');
-            const response = await chrome.runtime.sendMessage({
-                action: 'testTabAccess'
-            });
+            const message = { action: 'testTabAccess' };
+            console.log('Sending message:', message);
+            
+            const response = await chrome.runtime.sendMessage(message);
             console.log('Tab access test result:', response);
             
-            if (response.success) {
+            if (response && response.success) {
                 this.showNotification(`Tab access test successful! Found ${response.allTabsCount} total tabs, ${response.windowTabsCount} in current window.`, 'success');
             } else {
-                this.showNotification('Tab access test failed: ' + response.error, 'error');
+                const errorMsg = response ? response.error : 'No response received';
+                this.showNotification('Tab access test failed: ' + errorMsg, 'error');
             }
         } catch (error) {
             console.error('Error testing tab access:', error);

@@ -2,19 +2,25 @@
 
 class AISnipBackground {
     constructor() {
+        console.log('AISnipBackground constructor called');
         this.init();
     }
 
     init() {
+        console.log('AISnipBackground init called');
         this.setupMessageListeners();
         this.setupContextMenus();
+        console.log('AISnipBackground initialization complete');
     }
 
     setupMessageListeners() {
+        console.log('Setting up message listeners...');
         chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+            console.log('Message received in background:', request, 'from:', sender);
             this.handleMessage(request, sender, sendResponse);
             return true; // Keep message channel open for async responses
         });
+        console.log('Message listeners set up successfully');
     }
 
     setupContextMenus() {
@@ -355,7 +361,9 @@ class AISnipBackground {
 }
 
 // Initialize background service worker
+console.log('Initializing AISnipBackground...');
 new AISnipBackground();
+console.log('AISnipBackground initialized successfully');
 
 // Handle extension installation
 chrome.runtime.onInstalled.addListener((details) => {
