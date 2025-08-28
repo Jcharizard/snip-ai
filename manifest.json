@@ -1,8 +1,14 @@
 {
   "manifest_version": 3,
-  "name": "AI Snip - Smart Screenshot Assistant",
+  "name": "SnipFlow - Smart Screenshot Assistant",
   "version": "1.0.0",
   "description": "Capture screenshots and get instant AI-powered answers. Perfect for homework help and quick problem solving.",
+  "icons": {
+    "16": "icon.png",
+    "32": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  },
   
   "permissions": [
     "activeTab",
@@ -12,13 +18,11 @@
     "contextMenus"
   ],
   
-  "host_permissions": [
-    "https://api.openai.com/*"
-  ],
+
   
   "action": {
     "default_popup": "popup.html",
-    "default_title": "AI Snip"
+    "default_title": "SnipFlow"
   },
   
   "background": {
@@ -31,5 +35,15 @@
       "js": ["content.js"],
       "css": ["content.css"]
     }
-  ]
+  ],
+  
+  "commands": {
+    "copy-locked-container": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+C",
+        "mac": "Command+Shift+C"
+      },
+      "description": "Copy locked container to clipboard"
+    }
+  }
 }

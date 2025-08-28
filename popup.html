@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Snip</title>
+    <title>SnipFlow</title>
     <link rel="stylesheet" href="popup.css">
 </head>
 <body>
     <div class="container">
         <!-- Header -->
         <header class="header">
-            <h1 class="title">AI Snip</h1>
+            <h1 class="title">SnipFlow</h1>
             <p class="subtitle">Smart Screenshot Assistant</p>
         </header>
 
@@ -24,6 +24,15 @@
                 Take Screenshot
             </button>
             
+            <!-- Lock Container Toggle -->
+            <div class="toggle-container">
+                <span class="toggle-label">Lock container</span>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="lockContainerToggle">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+            
             <button id="fullTabBtn" class="btn btn-secondary">
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                     <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
@@ -33,15 +42,35 @@
                 </svg>
                 Full Tab Screenshot
             </button>
+            
+            <!-- Copy Button -->
+            <button id="copyBtn" class="btn btn-copy">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                Copy Last Screenshot
+            </button>
         </div>
 
         <!-- Settings Section -->
         <div class="settings">
             <h3 class="section-title">Settings</h3>
+            
             <div class="setting-item">
-                <label for="apiKey">OpenAI API Key:</label>
-                <input type="password" id="apiKey" placeholder="sk-..." class="input">
-                <button id="saveApiKey" class="btn btn-small">Save</button>
+                <div class="toggle-container">
+                    <span class="toggle-label">Dark Mode</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="darkModeToggle">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+            
+            <div class="setting-item" id="shortcutSetting">
+                <label for="shortcutInput">Copy Container Shortcut:</label>
+                <input type="text" id="shortcutInput" class="input" placeholder="Click to set shortcut (e.g., Ctrl+Shift+C)" readonly>
+                <div class="setting-note">Press any key combination to set the shortcut</div>
             </div>
         </div>
 

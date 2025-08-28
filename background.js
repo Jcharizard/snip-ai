@@ -14,6 +14,7 @@ class AISnipBackground {
         console.log('AISnipBackground init called');
         this.setupMessageListeners();
         this.setupContextMenus();
+        this.setupKeyboardShortcuts();
         console.log('AISnipBackground initialization complete');
     }
 
@@ -41,6 +42,84 @@ class AISnipBackground {
                 this.startScreenshot(tab);
             }
         });
+    }
+
+    setupKeyboardShortcuts() {
+        console.log('Setting up keyboard shortcuts...');
+        
+        // Listen for keyboard shortcuts
+        chrome.commands.onCommand.addListener(async (command) => {
+            console.log('Keyboard command received:', command);
+            
+            if (command === 'copy-locked-container') {
+                console.log('Copy locked container shortcut triggered');
+                await this.handleCopyShortcut();
+            } else {
+                console.log('Unknown command:', command);
+            }
+        });
+        
+        console.log('Keyboard shortcuts set up successfully');
+    }
+
+    async handleCopyShortcut() {
+        try {
+            console.log('Keyboard shortcut triggered: copy-locked-container');
+            
+            // Get the current tab
+            const currentTab = await this.getCurrentTab();
+            console.log('Current tab for shortcut:', currentTab);
+            
+            // Check if content script is injected
+            try {
+                await chrome.tabs.sendMessage(currentTab.id, { action: 'ping' });
+                console.log('Content script is available');
+            } catch (error) {
+                console.log('Content script not available, injecting...');
+                // Inject content script
+                await chrome.scripting.executeScript({
+                    target: { tabId: currentTab.id },
+                    files: ['content.js']
+                });
+                console.log('Content script injected for shortcut');
+                
+                // Wait a moment for the script to initialize
+                await new Promise(resolve => setTimeout(resolve, 200));
+            }
+            
+            // Send message to content script to handle the copy operation
+            const response = await chrome.tabs.sendMessage(currentTab.id, {
+                action: 'handleCopyShortcut'
+            });
+            
+            if (response && response.success) {
+                console.log('Locked container copied to clipboard via shortcut!');
+            } else {
+                console.log('No locked container found for shortcut copy:', response ? response.error : 'Unknown error');
+            }
+        } catch (error) {
+            console.error('Error handling copy shortcut:', error);
+        }
+    }
+
+    async copyScreenshotToClipboard(dataUrl) {
+        try {
+            // Convert data URL to blob
+            const response = await fetch(dataUrl);
+            const blob = await response.blob();
+            
+            // Copy blob to clipboard
+            await navigator.clipboard.write([
+                new ClipboardItem({
+                    [blob.type]: blob
+                })
+            ]);
+            
+            return true;
+        } catch (error) {
+            console.error('Error copying screenshot to clipboard:', error);
+            throw error;
+        }
     }
 
     async getCurrentTab() {
@@ -75,12 +154,37 @@ class AISnipBackground {
                 throw new Error('No tabs found in any method');
             }
             
+            // Validate that all tabs have proper structure
+            tabs = tabs.filter(tab => {
+                if (!tab || typeof tab !== 'object') {
+                    console.log('Invalid tab object:', tab);
+                    return false;
+                }
+                if (!tab.id || !tab.windowId) {
+                    console.log('Tab missing required properties:', tab);
+                    return false;
+                }
+                return true;
+            });
+            
+            if (tabs.length === 0) {
+                throw new Error('No valid tabs found after validation');
+            }
+            
             // Find the first tab that's not a chrome:// or extension:// URL
-            let tab = tabs.find(t => !t.url.startsWith('chrome://') && !t.url.startsWith('chrome-extension://'));
+            let tab = tabs.find(t => {
+                try {
+                    return t && t.url && typeof t.url === 'string' && !t.url.startsWith('chrome://') && !t.url.startsWith('chrome-extension://');
+                } catch (error) {
+                    console.log('Error checking tab URL:', error, 'tab:', t);
+                    return false;
+                }
+            });
+            
             if (!tab) {
                 // If we're on a restricted page, provide a helpful error
                 const currentTab = tabs[0];
-                if (currentTab && (currentTab.url.startsWith('chrome://') || currentTab.url.startsWith('chrome-extension://'))) {
+                if (currentTab && currentTab.url && typeof currentTab.url === 'string' && (currentTab.url.startsWith('chrome://') || currentTab.url.startsWith('chrome-extension://'))) {
                     throw new Error('Cannot take screenshots on Chrome system pages. Please navigate to a regular website (like google.com) and try again.');
                 }
                 tab = tabs[0]; // Use the first tab if no suitable tab found
@@ -148,7 +252,7 @@ class AISnipBackground {
                     console.log('Starting screenshot process...');
                     const currentTab = await this.getCurrentTab();
                     console.log('Got current tab for screenshot:', currentTab);
-                    await this.startScreenshot(currentTab);
+                    await this.startScreenshot(currentTab, request.lockContainer);
                     sendResponse({ success: true });
                     break;
 
@@ -171,6 +275,17 @@ class AISnipBackground {
                     sendResponse(capture);
                     break;
 
+                case 'getCurrentTabId':
+                    const tabForId = await this.getCurrentTab();
+                    sendResponse({ success: true, tabId: tabForId.id });
+                    break;
+
+                case 'copyLockedContainerShortcut':
+                    console.log('Background received copy shortcut request from content script');
+                    await this.handleCopyShortcut();
+                    sendResponse({ success: true });
+                    break;
+
                 default:
                     sendResponse({ success: false, error: 'Unknown action' });
             }
@@ -180,34 +295,56 @@ class AISnipBackground {
         }
     }
 
-    async startScreenshot(tab) {
+    async startScreenshot(tab, lockContainer = false) {
         try {
             if (!tab || !tab.id) {
                 throw new Error('Invalid tab information');
             }
 
-            console.log('Starting screenshot for tab:', tab.id);
+            console.log('Starting screenshot for tab:', tab.id, 'lockContainer:', lockContainer);
 
             // Check if content script is already injected
+            let contentScriptReady = false;
             try {
                 await chrome.tabs.sendMessage(tab.id, { action: 'ping' });
                 console.log('Content script already injected');
+                contentScriptReady = true;
             } catch (error) {
                 console.log('Content script not found, injecting...');
-                // Inject content script to enable selection mode
-                await chrome.scripting.executeScript({
-                    target: { tabId: tab.id },
-                    files: ['content.js']
-                });
-                console.log('Content script injected successfully');
+                try {
+                    // Inject content script to enable selection mode
+                    await chrome.scripting.executeScript({
+                        target: { tabId: tab.id },
+                        files: ['content.js']
+                    });
+                    console.log('Content script injected successfully');
+                    
+                    // Wait a moment for the script to initialize
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                    
+                    // Verify the script is ready
+                    try {
+                        await chrome.tabs.sendMessage(tab.id, { action: 'ping' });
+                        console.log('Content script verified and ready');
+                        contentScriptReady = true;
+                    } catch (verifyError) {
+                        console.error('Content script injection failed verification:', verifyError);
+                        throw new Error('Failed to inject content script properly');
+                    }
+                } catch (injectError) {
+                    console.error('Failed to inject content script:', injectError);
+                    throw new Error('Cannot inject content script into this page');
+                }
             }
-
-            // Wait a moment for the script to initialize
-            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            if (!contentScriptReady) {
+                throw new Error('Content script is not ready');
+            }
 
             // Send message to content script to start selection mode
             await chrome.tabs.sendMessage(tab.id, {
-                action: 'startSelectionMode'
+                action: 'startSelectionMode',
+                lockContainer: lockContainer
             });
             
             console.log('Selection mode started successfully');
@@ -243,18 +380,25 @@ class AISnipBackground {
 
     async captureSelection(selection, tab) {
         try {
+            console.log('captureSelection called with selection:', selection);
+            console.log('tab:', tab);
+            
             if (!tab || !tab.windowId) {
                 throw new Error('Invalid tab information');
             }
 
             // Take full tab screenshot first
+            console.log('Taking full tab screenshot...');
             const fullScreenshot = await chrome.tabs.captureVisibleTab(tab.windowId, {
                 format: 'png',
                 quality: 100
             });
+            console.log('Full screenshot taken, length:', fullScreenshot.length);
 
             // Crop the screenshot based on selection coordinates
+            console.log('Cropping screenshot...');
             const croppedDataUrl = await this.cropImage(fullScreenshot, selection);
+            console.log('Cropping completed, result length:', croppedDataUrl ? croppedDataUrl.length : 'null');
 
             return {
                 success: true,
@@ -270,28 +414,50 @@ class AISnipBackground {
     }
 
     async cropImage(dataUrl, selection) {
-        return new Promise((resolve, reject) => {
-            const img = new Image();
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
+        console.log('cropImage called with dataUrl length:', dataUrl.length);
+        console.log('selection:', selection);
+        
+        try {
+            // Send the cropping task directly to the content script
+            const croppedDataUrl = await this.cropImageInContentScript(dataUrl, selection);
+            console.log('cropImage completed, result length:', croppedDataUrl ? croppedDataUrl.length : 'null');
+            return croppedDataUrl;
+        } catch (error) {
+            console.error('Error in cropImage:', error);
+            throw error;
+        }
+    }
 
-                // Set canvas size to selection size
-                canvas.width = selection.width;
-                canvas.height = selection.height;
-
-                // Draw cropped portion
-                ctx.drawImage(
-                    img,
-                    selection.x, selection.y, selection.width, selection.height,
-                    0, 0, selection.width, selection.height
-                );
-
-                resolve(canvas.toDataURL('image/png'));
-            };
-            img.onerror = reject;
-            img.src = dataUrl;
-        });
+    async cropImageInContentScript(dataUrl, selection) {
+        try {
+            console.log('cropImageInContentScript called');
+            
+            // Get the current tab
+            const currentTab = await this.getCurrentTab();
+            console.log('Current tab:', currentTab.id);
+            
+            // Send the cropping task to the content script
+            console.log('Sending cropImage message to content script...');
+            const response = await chrome.tabs.sendMessage(currentTab.id, {
+                action: 'cropImage',
+                dataUrl: dataUrl,
+                selection: selection
+            });
+            
+            console.log('Received response from content script:', response);
+            
+            if (response && response.success) {
+                console.log('Cropping successful, returning croppedDataUrl');
+                return response.croppedDataUrl;
+            } else {
+                const errorMsg = response ? response.error : 'Failed to crop image';
+                console.error('Cropping failed:', errorMsg);
+                throw new Error(errorMsg);
+            }
+        } catch (error) {
+            console.error('Error cropping image in content script:', error);
+            throw error;
+        }
     }
 
     async analyzeScreenshot(dataUrl) {

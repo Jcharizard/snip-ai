@@ -5,10 +5,16 @@ class AISnipPopup {
         this.init();
     }
 
-    init() {
+    async init() {
         this.loadSettings();
         this.bindEvents();
         this.loadRecentScreenshots();
+        
+        // Check for existing lock state on this tab
+        await this.checkTabLockState();
+        
+        // Initialize shortcut setting state
+        this.updateShortcutSetting(document.getElementById('lockContainerToggle').checked);
     }
 
     bindEvents() {
@@ -21,66 +27,108 @@ class AISnipPopup {
             this.takeFullTabScreenshot();
         });
 
-        // Settings
-        document.getElementById('saveApiKey').addEventListener('click', () => {
-            this.saveApiKey();
+        // Copy button
+        document.getElementById('copyBtn').addEventListener('click', () => {
+            this.copyLastScreenshot();
         });
 
-        // Enter key in API key input
-        document.getElementById('apiKey').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                this.saveApiKey();
-            }
+        // Lock container toggle
+        document.getElementById('lockContainerToggle').addEventListener('change', (e) => {
+            this.handleLockContainerToggle(e.target.checked);
+            this.updateCopyButtonText(e.target.checked);
+            this.updateShortcutSetting(e.target.checked);
         });
 
-        // Test button (for debugging) - Fix the selector
-        const testBtn = document.createElement('button');
-        testBtn.textContent = 'Test Tab Access';
-        testBtn.style.cssText = 'background: #ffc107; color: #000; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; margin-top: 10px; width: 100%;';
-        testBtn.addEventListener('click', () => {
-            this.testTabAccess();
+        // Dark mode toggle
+        document.getElementById('darkModeToggle').addEventListener('change', (e) => {
+            this.handleDarkModeToggle(e.target.checked);
         });
-        
-        // Fix: Use the correct selector
-        const settingsSection = document.querySelector('.settings');
-        if (settingsSection) {
-            settingsSection.appendChild(testBtn);
-        } else {
-            console.error('Settings section not found');
-        }
+
+        // Shortcut input
+        document.getElementById('shortcutInput').addEventListener('click', () => {
+            this.startShortcutRecording();
+        });
     }
 
     async loadSettings() {
         try {
-            const result = await chrome.storage.sync.get(['openaiApiKey']);
-            if (result.openaiApiKey) {
-                document.getElementById('apiKey').value = result.openaiApiKey;
+            const result = await chrome.storage.sync.get(['darkMode', 'copyShortcut']);
+            
+            // Load dark mode setting
+            if (result.darkMode) {
+                document.body.classList.add('dark-mode');
+                document.getElementById('darkModeToggle').checked = true;
+            }
+            
+            // Load shortcut setting
+            if (result.copyShortcut) {
+                document.getElementById('shortcutInput').value = result.copyShortcut;
             }
         } catch (error) {
             console.error('Error loading settings:', error);
         }
     }
 
-    async saveApiKey() {
-        const apiKey = document.getElementById('apiKey').value.trim();
-        
-        if (!apiKey) {
-            this.showNotification('Please enter your OpenAI API key', 'error');
-            return;
-        }
-
-        if (!apiKey.startsWith('sk-')) {
-            this.showNotification('Invalid API key format. Should start with "sk-"', 'error');
-            return;
-        }
-
+    async handleDarkModeToggle(enabled) {
         try {
-            await chrome.storage.sync.set({ openaiApiKey: apiKey });
-            this.showNotification('API key saved successfully!', 'success');
+            if (enabled) {
+                document.body.classList.add('dark-mode');
+            } else {
+                document.body.classList.remove('dark-mode');
+            }
+            
+            await chrome.storage.sync.set({ darkMode: enabled });
         } catch (error) {
-            console.error('Error saving API key:', error);
-            this.showNotification('Failed to save API key', 'error');
+            console.error('Error saving dark mode setting:', error);
         }
+    }
+
+    updateShortcutSetting(isLocked) {
+        const shortcutSetting = document.getElementById('shortcutSetting');
+        if (isLocked) {
+            shortcutSetting.classList.remove('disabled');
+        } else {
+            shortcutSetting.classList.add('disabled');
+        }
+    }
+
+    startShortcutRecording() {
+        const input = document.getElementById('shortcutInput');
+        input.value = 'Press keys...';
+        input.focus();
+        
+        const handleKeyDown = async (e) => {
+            e.preventDefault();
+            
+            const keys = [];
+            if (e.ctrlKey) keys.push('Ctrl');
+            if (e.shiftKey) keys.push('Shift');
+            if (e.altKey) keys.push('Alt');
+            if (e.metaKey) keys.push('Cmd');
+            
+            // Add the main key (avoid modifier keys)
+            if (!['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) {
+                keys.push(e.key.toUpperCase());
+            }
+            
+            if (keys.length > 0) {
+                const shortcut = keys.join('+');
+                input.value = shortcut;
+                
+                try {
+                    await chrome.storage.sync.set({ copyShortcut: shortcut });
+                    this.showNotification('Shortcut saved!', 'success');
+                } catch (error) {
+                    console.error('Error saving shortcut:', error);
+                    this.showNotification('Failed to save shortcut', 'error');
+                }
+                
+                document.removeEventListener('keydown', handleKeyDown);
+                input.blur();
+            }
+        };
+        
+        document.addEventListener('keydown', handleKeyDown);
     }
 
     async startScreenshot() {
@@ -92,10 +140,14 @@ class AISnipPopup {
                 return;
             }
             
+            // Get lock container state
+            const lockContainer = document.getElementById('lockContainerToggle').checked;
+            
             // Send message to background script to start screenshot
             await chrome.runtime.sendMessage({
                 action: 'startScreenshot',
-                mode: 'selection'
+                mode: 'selection',
+                lockContainer: lockContainer
             });
             
             // Close popup after successful message send
@@ -128,7 +180,6 @@ class AISnipPopup {
 
             if (response && response.success) {
                 this.hideStatus();
-                this.showNotification('Screenshot captured!', 'success');
                 
                 // Copy to clipboard
                 await this.copyScreenshotToClipboard(response.dataUrl);
@@ -136,8 +187,8 @@ class AISnipPopup {
                 // Save to recent screenshots
                 await this.saveRecentScreenshot(response.dataUrl, 'Full tab screenshot');
                 
-                // Show the screenshot
-                this.showScreenshot(response.dataUrl);
+                // Show success notification (NO NEW WINDOW)
+                this.showNotification('Full tab screenshot captured and copied to clipboard!', 'success');
             } else {
                 this.hideStatus();
                 const errorMsg = response ? response.error : 'Unknown error occurred';
@@ -199,11 +250,19 @@ class AISnipPopup {
         }
     }
 
-    async copyScreenshotToClipboard(dataUrl) {
+    async copyScreenshotToClipboard(dataUrl, showNotification = true) {
         try {
+            // Check clipboard permissions
+            if (!navigator.clipboard) {
+                throw new Error('Clipboard API not available');
+            }
+            
             // Convert data URL to blob
             const response = await fetch(dataUrl);
             const blob = await response.blob();
+            
+            console.log('Blob type:', blob.type);
+            console.log('Blob size:', blob.size);
             
             // Copy blob to clipboard
             await navigator.clipboard.write([
@@ -212,72 +271,34 @@ class AISnipPopup {
                 })
             ]);
             
-            this.showNotification('Screenshot copied to clipboard!', 'success');
+            console.log('Successfully copied to clipboard');
+            
+            if (showNotification) {
+                this.showNotification('Screenshot copied to clipboard!', 'success');
+            }
         } catch (error) {
             console.error('Error copying screenshot to clipboard:', error);
-            this.showNotification('Screenshot saved to history', 'info');
+            
+            // Try fallback method for text-based copying
+            try {
+                console.log('Trying fallback clipboard method...');
+                await navigator.clipboard.writeText(dataUrl);
+                console.log('Fallback successful - copied data URL as text');
+                if (showNotification) {
+                    this.showNotification('Screenshot URL copied to clipboard!', 'info');
+                }
+            } catch (fallbackError) {
+                console.error('Fallback clipboard method also failed:', fallbackError);
+                if (showNotification) {
+                    this.showNotification('Failed to copy to clipboard. Screenshot saved to history.', 'error');
+                }
+            }
+            
+            throw error; // Re-throw so calling function can handle
         }
     }
 
-    showScreenshot(dataUrl) {
-        // Create a new window to show the screenshot
-        const screenshotWindow = window.open('', '_blank', 'width=800,height=600');
-        
-        const html = `
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>AI Snip - Screenshot</title>
-                <style>
-                    body { 
-                        font-family: Arial, sans-serif; 
-                        padding: 20px; 
-                        margin: 0; 
-                        background: #f8f9fa;
-                    }
-                    .screenshot-container {
-                        background: white;
-                        padding: 20px;
-                        border-radius: 12px;
-                        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-                        max-width: 100%;
-                    }
-                    .screenshot { 
-                        max-width: 100%; 
-                        border-radius: 8px; 
-                        margin-bottom: 20px;
-                        border: 1px solid #e9ecef;
-                    }
-                    .btn { 
-                        background: #667eea; 
-                        color: white; 
-                        border: none; 
-                        padding: 10px 20px; 
-                        border-radius: 6px; 
-                        cursor: pointer;
-                        margin-right: 10px;
-                    }
-                    .btn:hover {
-                        background: #5a6fd8;
-                    }
-                </style>
-            </head>
-            <body>
-                <div class="screenshot-container">
-                    <h2>Screenshot Captured</h2>
-                    <img src="${dataUrl}" alt="Screenshot" class="screenshot">
-                    <div>
-                        <button class="btn" onclick="navigator.clipboard.writeText('${dataUrl}')">Copy Image URL</button>
-                        <button class="btn" onclick="window.close()">Close</button>
-                    </div>
-                </div>
-            </body>
-            </html>
-        `;
-        
-        screenshotWindow.document.write(html);
-        screenshotWindow.document.close();
-    }
+
 
     async saveRecentScreenshot(dataUrl, title = null) {
         try {
@@ -328,18 +349,37 @@ class AISnipPopup {
             recentList.innerHTML = screenshots.map(screenshot => `
                 <div class="recent-item" data-id="${screenshot.id}">
                     <img src="${screenshot.dataUrl}" alt="Screenshot" class="recent-thumbnail">
-                    <div class="recent-info">
-                        <div class="recent-title">${screenshot.title}</div>
-                        <div class="recent-time">${new Date(screenshot.timestamp).toLocaleString()}</div>
-                    </div>
+                                            <div class="recent-info">
+                            <div class="recent-title">${screenshot.title}</div>
+                            <div class="recent-time">${new Date(screenshot.timestamp).toLocaleString()}</div>
+                        </div>
+                        <button class="btn btn-small btn-copy" data-screenshot-id="${screenshot.id}" title="Copy screenshot">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            </svg>
+                        </button>
                 </div>
             `).join('');
 
             // Add click handlers for recent items
             recentList.querySelectorAll('.recent-item').forEach(item => {
-                item.addEventListener('click', () => {
+                item.addEventListener('click', (e) => {
+                    // Don't trigger if clicking on copy button
+                    if (e.target.closest('.btn-copy')) {
+                        return;
+                    }
                     const id = parseInt(item.dataset.id);
                     this.showRecentScreenshot(id);
+                });
+            });
+
+            // Add copy button handlers
+            recentList.querySelectorAll('.btn-copy').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const screenshotId = parseInt(button.dataset.screenshotId);
+                    this.copyRecentScreenshot(screenshotId);
                 });
             });
         } catch (error) {
@@ -402,7 +442,14 @@ class AISnipPopup {
         // Create notification element
         const notification = document.createElement('div');
         notification.className = `notification notification-${type}`;
-        notification.textContent = message;
+        
+        // Create notification content
+        notification.innerHTML = `
+            <div class="notification-content">
+                <span class="notification-message">${message}</span>
+                <button class="notification-close" onclick="this.parentElement.parentElement.remove()">×</button>
+            </div>
+        `;
         
         // Add styles
         notification.style.cssText = `
@@ -416,39 +463,65 @@ class AISnipPopup {
             font-size: 14px;
             z-index: 10000;
             animation: slideIn 0.3s ease;
+            min-width: 300px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         `;
+        
+        // Add styles for the content and close button
+        const style = document.createElement('style');
+        style.textContent = `
+            .notification-content {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 10px;
+            }
+            .notification-message {
+                flex: 1;
+            }
+            .notification-close {
+                background: none;
+                border: none;
+                color: white;
+                font-size: 18px;
+                cursor: pointer;
+                padding: 0;
+                width: 20px;
+                height: 20px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: 50%;
+                transition: background-color 0.2s;
+            }
+            .notification-close:hover {
+                background-color: rgba(255,255,255,0.2);
+            }
+        `;
+        document.head.appendChild(style);
         
         document.body.appendChild(notification);
         
-        // Remove after 3 seconds
+        // Remove after 5 seconds (increased from 3 seconds)
         setTimeout(() => {
-            notification.style.animation = 'slideOut 0.3s ease';
-            setTimeout(() => {
-                if (notification.parentNode) {
-                    notification.parentNode.removeChild(notification);
-                }
-            }, 300);
-        }, 3000);
+            if (notification.parentNode) {
+                notification.style.animation = 'slideOut 0.3s ease';
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
+                }, 300);
+            }
+        }, 5000);
     }
 
-    async testTabAccess() {
+    async checkShortcut() {
         try {
-            console.log('Testing tab access from popup...');
-            const message = { action: 'testTabAccess' };
-            console.log('Sending message:', message);
-            
-            const response = await chrome.runtime.sendMessage(message);
-            console.log('Tab access test result:', response);
-            
-            if (response && response.success) {
-                this.showNotification(`Tab access test successful! Found ${response.allTabsCount} total tabs, ${response.windowTabsCount} in current window.`, 'success');
-            } else {
-                const errorMsg = response ? response.error : 'No response received';
-                this.showNotification('Tab access test failed: ' + errorMsg, 'error');
-            }
+            const result = await chrome.storage.sync.get(['copyShortcut']);
+            return result.copyShortcut || null;
         } catch (error) {
-            console.error('Error testing tab access:', error);
-            this.showNotification('Tab access test error: ' + error.message, 'error');
+            console.error('Error checking shortcut:', error);
+            return null;
         }
     }
 
@@ -463,7 +536,7 @@ class AISnipPopup {
                 const currentTab = await chrome.tabs.query({ active: true, currentWindow: true });
                 if (currentTab && currentTab[0]) {
                     const url = currentTab[0].url;
-                    if (url.startsWith('chrome://') || url.startsWith('chrome-extension://')) {
+                    if (url && (url.startsWith('chrome://') || url.startsWith('chrome-extension://'))) {
                         return {
                             valid: false,
                             error: 'Cannot take screenshots on Chrome system pages. Please navigate to a regular website (like google.com) and try again.'
@@ -484,10 +557,168 @@ class AISnipPopup {
             };
         }
     }
+
+    async handleLockContainerToggle(locked) {
+        try {
+            // Send message to content script to handle lock state
+            const currentTab = await chrome.tabs.query({ active: true, currentWindow: true });
+            if (currentTab && currentTab[0]) {
+                try {
+                    await chrome.tabs.sendMessage(currentTab[0].id, {
+                        action: 'toggleLockContainer',
+                        locked: locked
+                    });
+                } catch (messageError) {
+                    console.log('Content script not available for lock container toggle:', messageError.message);
+                    // This is normal if content script isn't injected yet
+                    // The lock state will be handled when the screenshot is taken
+                }
+            }
+        } catch (error) {
+            console.error('Error handling lock container toggle:', error);
+        }
+    }
+
+    updateCopyButtonText(isLocked) {
+        const copyBtn = document.getElementById('copyBtn');
+        if (isLocked) {
+            copyBtn.innerHTML = `
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                Copy Container
+            `;
+        } else {
+            copyBtn.innerHTML = `
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                Copy Last Screenshot
+            `;
+        }
+    }
+
+    async copyLastScreenshot() {
+        try {
+            const isLocked = document.getElementById('lockContainerToggle').checked;
+            
+            if (isLocked) {
+                // Copy the locked container content
+                await this.copyLockedContainer();
+            } else {
+                // Copy the last screenshot
+                const screenshots = await this.getRecentScreenshots();
+                if (screenshots.length === 0) {
+                    this.showNotification('No screenshots available to copy', 'error');
+                    return;
+                }
+
+                const lastScreenshot = screenshots[0];
+                await this.copyScreenshotToClipboard(lastScreenshot.dataUrl);
+                this.showNotification('Last screenshot copied to clipboard!', 'success');
+            }
+        } catch (error) {
+            console.error('Error copying:', error);
+            this.showNotification('Failed to copy', 'error');
+        }
+    }
+
+    async checkTabLockState() {
+        try {
+            const currentTab = await chrome.tabs.query({ active: true, currentWindow: true });
+            if (currentTab && currentTab[0]) {
+                try {
+                    const response = await chrome.tabs.sendMessage(currentTab[0].id, {
+                        action: 'getTabLockState'
+                    });
+                    
+                    if (response && response.isLocked) {
+                        // Update UI to reflect locked state
+                        const toggle = document.getElementById('lockContainerToggle');
+                        if (toggle) {
+                            toggle.checked = true;
+                        }
+                        this.updateCopyButtonText(true);
+                    } else {
+                        this.updateCopyButtonText(false);
+                    }
+                } catch (messageError) {
+                    console.log('Content script not available for tab lock state check:', messageError.message);
+                    // This is normal if content script isn't injected yet
+                    this.updateCopyButtonText(false);
+                }
+            }
+        } catch (error) {
+            console.error('Error checking tab lock state:', error);
+            this.updateCopyButtonText(false);
+        }
+    }
+
+    async copyRecentScreenshot(screenshotId) {
+        try {
+            const screenshots = await this.getRecentScreenshots();
+            const screenshot = screenshots.find(s => s.id === screenshotId);
+            
+            if (screenshot) {
+                await this.copyScreenshotToClipboard(screenshot.dataUrl);
+                this.showNotification('Screenshot copied to clipboard!', 'success');
+            } else {
+                this.showNotification('Screenshot not found', 'error');
+            }
+        } catch (error) {
+            console.error('Error copying recent screenshot:', error);
+            this.showNotification('Failed to copy screenshot', 'error');
+        }
+    }
+
+    async copyLockedContainer() {
+        try {
+            console.log('Starting copyLockedContainer...');
+            
+            // Send message to content script to get the locked container screenshot
+            const currentTab = await chrome.tabs.query({ active: true, currentWindow: true });
+            if (currentTab && currentTab[0]) {
+                console.log('Sending getLockedContainerScreenshot message to tab:', currentTab[0].id);
+                
+                try {
+                    const response = await chrome.tabs.sendMessage(currentTab[0].id, {
+                        action: 'getLockedContainerScreenshot'
+                    });
+                    
+                    console.log('Received response from content script:', response);
+                    
+                    if (response && response.success && response.dataUrl) {
+                        console.log('Successfully got locked container screenshot, copying to clipboard...');
+                        console.log('dataUrl length:', response.dataUrl.length);
+                        console.log('dataUrl starts with:', response.dataUrl.substring(0, 50));
+                        
+                        await this.copyScreenshotToClipboard(response.dataUrl, false); // Don't show notification here
+                        this.showNotification('Container content copied to clipboard!', 'success');
+                    } else {
+                        const errorMsg = response ? response.error : 'Unknown error';
+                        console.error('Failed to get locked container screenshot:', errorMsg);
+                        console.error('Response object:', response);
+                        this.showNotification(`No locked container found: ${errorMsg}`, 'error');
+                    }
+                } catch (messageError) {
+                    console.error('Failed to communicate with content script:', messageError);
+                    this.showNotification('Content script not available. Please try taking a screenshot first.', 'error');
+                }
+            } else {
+                console.error('Cannot access current tab');
+                this.showNotification('Cannot access current tab', 'error');
+            }
+        } catch (error) {
+            console.error('Error copying locked container:', error);
+            this.showNotification(`Failed to copy container: ${error.message}`, 'error');
+        }
+    }
 }
 
 // Initialize popup when DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     new AISnipPopup();
 });
 
