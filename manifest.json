@@ -44,6 +44,13 @@
         "mac": "Command+Shift+C"
       },
       "description": "Copy locked container to clipboard"
+    },
+    "copy-full-tab": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+F",
+        "mac": "Command+Shift+F"
+      },
+      "description": "Copy full tab screenshot to clipboard"
     }
   }
 }

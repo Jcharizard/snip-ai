@@ -54,6 +54,9 @@ class AISnipBackground {
             if (command === 'copy-locked-container') {
                 console.log('Copy locked container shortcut triggered');
                 await this.handleCopyShortcut();
+            } else if (command === 'copy-full-tab') {
+                console.log('Copy full tab shortcut triggered');
+                await this.handleFullTabShortcut();
             } else {
                 console.log('Unknown command:', command);
             }
@@ -99,6 +102,27 @@ class AISnipBackground {
             }
         } catch (error) {
             console.error('Error handling copy shortcut:', error);
+        }
+    }
+
+    async handleFullTabShortcut() {
+        try {
+            console.log('Keyboard shortcut triggered: copy-full-tab');
+            
+            // Get the current tab
+            const currentTab = await this.getCurrentTab();
+            console.log('Current tab for full tab shortcut:', currentTab);
+            
+            // Take full tab screenshot and copy to clipboard (no popup)
+            const result = await this.takeFullTabScreenshot(currentTab, true); // true = silent mode
+            
+            if (result && result.success) {
+                console.log('Full tab screenshot copied to clipboard via shortcut!');
+            } else {
+                console.log('Failed to take full tab screenshot via shortcut:', result ? result.error : 'Unknown error');
+            }
+        } catch (error) {
+            console.error('Error handling full tab shortcut:', error);
         }
     }
 
@@ -354,7 +378,7 @@ class AISnipBackground {
         }
     }
 
-    async takeFullTabScreenshot(tab) {
+    async takeFullTabScreenshot(tab, silent = false) {
         try {
             if (!tab || !tab.windowId) {
                 throw new Error('Invalid tab information');
@@ -364,6 +388,25 @@ class AISnipBackground {
                 format: 'png',
                 quality: 100
             });
+
+            // If silent mode, copy to clipboard automatically
+            if (silent) {
+                try {
+                    // Convert data URL to blob and copy to clipboard
+                    const response = await fetch(dataUrl);
+                    const blob = await response.blob();
+                    
+                    // We can't use clipboard API in background script, so send to content script
+                    await chrome.tabs.sendMessage(tab.id, {
+                        action: 'copyImageToClipboard',
+                        dataUrl: dataUrl
+                    });
+                    
+                    console.log('Full tab screenshot copied to clipboard silently');
+                } catch (clipboardError) {
+                    console.error('Error copying to clipboard in silent mode:', clipboardError);
+                }
+            }
 
             return {
                 success: true,

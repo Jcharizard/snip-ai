@@ -72,6 +72,16 @@ class AISnipContent {
                 });
                 return true; // Keep message channel open for async response
             }
+            
+            if (request.action === 'copyImageToClipboard') {
+                this.copyScreenshotToClipboard(request.dataUrl).then(result => {
+                    sendResponse({ success: true });
+                }).catch(error => {
+                    console.error('Error copying image to clipboard:', error);
+                    sendResponse({ success: false, error: error.message });
+                });
+                return true; // Keep message channel open for async response
+            }
         });
     }
 
@@ -104,6 +114,23 @@ class AISnipContent {
                         // Fallback: send message to background script
                         console.log('Local copy failed, trying background script fallback');
                         chrome.runtime.sendMessage({ action: 'copyLockedContainerShortcut' });
+                    }
+                });
+            }
+            
+            // Global shortcut for copying full tab screenshot (Ctrl+Shift+F or Cmd+Shift+F)
+            if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'F') {
+                console.log('Global shortcut detected: Ctrl/Cmd+Shift+F');
+                e.preventDefault();
+                e.stopPropagation();
+                
+                // Send message to background script to take full tab screenshot
+                chrome.runtime.sendMessage({ action: 'takeFullTabScreenshot' }).then(result => {
+                    if (result && result.success && result.dataUrl) {
+                        // Copy to clipboard
+                        this.copyScreenshotToClipboard(result.dataUrl).then(() => {
+                            this.showQuickNotification('Full tab screenshot copied to clipboard!');
+                        });
                     }
                 });
             }

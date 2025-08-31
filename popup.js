@@ -44,15 +44,19 @@ class AISnipPopup {
             this.handleDarkModeToggle(e.target.checked);
         });
 
-        // Shortcut input
+        // Shortcut inputs
         document.getElementById('shortcutInput').addEventListener('click', () => {
-            this.startShortcutRecording();
+            this.startShortcutRecording('copyShortcut', 'shortcutInput');
+        });
+        
+        document.getElementById('fullTabShortcutInput').addEventListener('click', () => {
+            this.startShortcutRecording('fullTabShortcut', 'fullTabShortcutInput');
         });
     }
 
     async loadSettings() {
         try {
-            const result = await chrome.storage.sync.get(['darkMode', 'copyShortcut']);
+            const result = await chrome.storage.sync.get(['darkMode', 'copyShortcut', 'fullTabShortcut']);
             
             // Load dark mode setting
             if (result.darkMode) {
@@ -60,9 +64,12 @@ class AISnipPopup {
                 document.getElementById('darkModeToggle').checked = true;
             }
             
-            // Load shortcut setting
+            // Load shortcut settings
             if (result.copyShortcut) {
                 document.getElementById('shortcutInput').value = result.copyShortcut;
+            }
+            if (result.fullTabShortcut) {
+                document.getElementById('fullTabShortcutInput').value = result.fullTabShortcut;
             }
         } catch (error) {
             console.error('Error loading settings:', error);
@@ -92,8 +99,8 @@ class AISnipPopup {
         }
     }
 
-    startShortcutRecording() {
-        const input = document.getElementById('shortcutInput');
+    startShortcutRecording(settingKey, inputId) {
+        const input = document.getElementById(inputId);
         input.value = 'Press keys...';
         input.focus();
         
@@ -116,7 +123,9 @@ class AISnipPopup {
                 input.value = shortcut;
                 
                 try {
-                    await chrome.storage.sync.set({ copyShortcut: shortcut });
+                    const saveData = {};
+                    saveData[settingKey] = shortcut;
+                    await chrome.storage.sync.set(saveData);
                     this.showNotification('Shortcut saved!', 'success');
                 } catch (error) {
                     console.error('Error saving shortcut:', error);
