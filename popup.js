@@ -127,6 +127,22 @@ class AISnipPopup {
                     saveData[settingKey] = shortcut;
                     await chrome.storage.sync.set(saveData);
                     this.showNotification('Shortcut saved!', 'success');
+                    
+                    // Reload shortcuts in all content scripts
+                    try {
+                        const tabs = await chrome.tabs.query({});
+                        for (const tab of tabs) {
+                            if (tab.url && (tab.url.startsWith('http://') || tab.url.startsWith('https://'))) {
+                                try {
+                                    await chrome.tabs.sendMessage(tab.id, { action: 'reloadShortcuts' });
+                                } catch (e) {
+                                    // Ignore errors for tabs without content script
+                                }
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Error reloading shortcuts in content scripts:', error);
+                    }
                 } catch (error) {
                     console.error('Error saving shortcut:', error);
                     this.showNotification('Failed to save shortcut', 'error');

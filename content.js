@@ -18,8 +18,9 @@ class AISnipContent {
         this.setupMessageListeners();
         this.setupKeyboardShortcuts();
         
-        // Load saved tab state
+        // Load saved tab state and custom shortcuts
         await this.loadTabState();
+        await this.loadCustomShortcuts();
     }
 
     setupMessageListeners() {
@@ -82,6 +83,16 @@ class AISnipContent {
                 });
                 return true; // Keep message channel open for async response
             }
+            
+            if (request.action === 'reloadShortcuts') {
+                this.loadCustomShortcuts().then(() => {
+                    sendResponse({ success: true });
+                }).catch(error => {
+                    console.error('Error reloading shortcuts:', error);
+                    sendResponse({ success: false, error: error.message });
+                });
+                return true; // Keep message channel open for async response
+            }
         });
     }
 
@@ -101,9 +112,52 @@ class AISnipContent {
                 this.confirmSelection();
             }
             
+            // Check for custom shortcuts
+            if (this.customShortcuts) {
+                // Check copy container shortcut
+                const copyContainerShortcut = this.parseShortcut(this.customShortcuts.copyContainer);
+                if (this.isShortcutMatch(e, copyContainerShortcut)) {
+                    console.log('Custom copy container shortcut detected:', this.customShortcuts.copyContainer);
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    // Try local copy first
+                    this.handleCopyShortcut().then(result => {
+                        console.log('Local shortcut copy result:', result);
+                        if (!result || !result.success) {
+                            // Fallback: send message to background script
+                            console.log('Local copy failed, trying background script fallback');
+                            chrome.runtime.sendMessage({ action: 'copyLockedContainerShortcut' });
+                        }
+                    });
+                    return;
+                }
+                
+                // Check full tab shortcut
+                const fullTabShortcut = this.parseShortcut(this.customShortcuts.fullTab);
+                if (this.isShortcutMatch(e, fullTabShortcut)) {
+                    console.log('Custom full tab shortcut detected:', this.customShortcuts.fullTab);
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    // Send message to background script to handle full tab shortcut
+                    chrome.runtime.sendMessage({ action: 'handleFullTabShortcut' }).then(result => {
+                        if (result && result.success) {
+                            this.showQuickNotification('Full tab screenshot copied to clipboard!');
+                        } else {
+                            console.error('Full tab shortcut failed:', result);
+                        }
+                    }).catch(error => {
+                        console.error('Error with full tab shortcut:', error);
+                    });
+                    return;
+                }
+            }
+            
+            // Fallback to default shortcuts if custom shortcuts not loaded
             // Global shortcut for copying locked container (Ctrl+Shift+C or Cmd+Shift+C)
             if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'C') {
-                console.log('Global shortcut detected: Ctrl/Cmd+Shift+C');
+                console.log('Default copy container shortcut detected: Ctrl/Cmd+Shift+C');
                 e.preventDefault();
                 e.stopPropagation();
                 
@@ -120,18 +174,19 @@ class AISnipContent {
             
             // Global shortcut for copying full tab screenshot (Ctrl+Shift+F or Cmd+Shift+F)
             if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'F') {
-                console.log('Global shortcut detected: Ctrl/Cmd+Shift+F');
+                console.log('Default full tab shortcut detected: Ctrl/Cmd+Shift+F');
                 e.preventDefault();
                 e.stopPropagation();
                 
-                // Send message to background script to take full tab screenshot
-                chrome.runtime.sendMessage({ action: 'takeFullTabScreenshot' }).then(result => {
-                    if (result && result.success && result.dataUrl) {
-                        // Copy to clipboard
-                        this.copyScreenshotToClipboard(result.dataUrl).then(() => {
-                            this.showQuickNotification('Full tab screenshot copied to clipboard!');
-                        });
+                // Send message to background script to handle full tab shortcut
+                chrome.runtime.sendMessage({ action: 'handleFullTabShortcut' }).then(result => {
+                    if (result && result.success) {
+                        this.showQuickNotification('Full tab screenshot copied to clipboard!');
+                    } else {
+                        console.error('Full tab shortcut failed:', result);
                     }
+                }).catch(error => {
+                    console.error('Error with full tab shortcut:', error);
                 });
             }
         });
@@ -885,6 +940,61 @@ class AISnipContent {
                 message.parentNode.removeChild(message);
             }
         }, 5000);
+    }
+
+    async loadCustomShortcuts() {
+        try {
+            const result = await chrome.storage.sync.get(['copyShortcut', 'fullTabShortcut']);
+            this.customShortcuts = {
+                copyContainer: result.copyShortcut || 'Ctrl+Shift+C',
+                fullTab: result.fullTabShortcut || 'Ctrl+Shift+F'
+            };
+            console.log('Loaded custom shortcuts:', this.customShortcuts);
+        } catch (error) {
+            console.error('Error loading custom shortcuts:', error);
+            // Fallback to defaults
+            this.customShortcuts = {
+                copyContainer: 'Ctrl+Shift+C',
+                fullTab: 'Ctrl+Shift+F'
+            };
+        }
+    }
+
+    parseShortcut(shortcutString) {
+        if (!shortcutString) return null;
+        
+        const parts = shortcutString.split('+').map(part => part.trim());
+        const modifiers = {
+            ctrl: false,
+            shift: false,
+            alt: false,
+            meta: false
+        };
+        let key = null;
+        
+        for (const part of parts) {
+            const lowerPart = part.toLowerCase();
+            if (lowerPart === 'ctrl') modifiers.ctrl = true;
+            else if (lowerPart === 'shift') modifiers.shift = true;
+            else if (lowerPart === 'alt') modifiers.alt = true;
+            else if (lowerPart === 'cmd' || lowerPart === 'meta') modifiers.meta = true;
+            else key = part.toUpperCase();
+        }
+        
+        return { modifiers, key };
+    }
+
+    isShortcutMatch(event, shortcutConfig) {
+        if (!shortcutConfig) return false;
+        
+        const { modifiers, key } = shortcutConfig;
+        return (
+            event.ctrlKey === modifiers.ctrl &&
+            event.shiftKey === modifiers.shift &&
+            event.altKey === modifiers.alt &&
+            event.metaKey === modifiers.meta &&
+            event.key === key
+        );
     }
 }
 

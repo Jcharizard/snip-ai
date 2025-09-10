@@ -118,11 +118,14 @@ class AISnipBackground {
             
             if (result && result.success) {
                 console.log('Full tab screenshot copied to clipboard via shortcut!');
+                return { success: true };
             } else {
                 console.log('Failed to take full tab screenshot via shortcut:', result ? result.error : 'Unknown error');
+                return { success: false, error: result ? result.error : 'Unknown error' };
             }
         } catch (error) {
             console.error('Error handling full tab shortcut:', error);
+            return { success: false, error: error.message };
         }
     }
 
@@ -286,6 +289,12 @@ class AISnipBackground {
                     console.log('Got current tab for full screenshot:', tab);
                     const result = await this.takeFullTabScreenshot(tab);
                     sendResponse(result);
+                    break;
+                    
+                case 'handleFullTabShortcut':
+                    console.log('Handling full tab shortcut from content script...');
+                    const shortcutResult = await this.handleFullTabShortcut();
+                    sendResponse(shortcutResult);
                     break;
 
                 case 'analyzeScreenshot':
