@@ -44,19 +44,15 @@ class AISnipPopup {
             this.handleDarkModeToggle(e.target.checked);
         });
 
-        // Shortcut inputs
+        // Shortcut input
         document.getElementById('shortcutInput').addEventListener('click', () => {
             this.startShortcutRecording('copyShortcut', 'shortcutInput');
-        });
-        
-        document.getElementById('fullTabShortcutInput').addEventListener('click', () => {
-            this.startShortcutRecording('fullTabShortcut', 'fullTabShortcutInput');
         });
     }
 
     async loadSettings() {
         try {
-            const result = await chrome.storage.sync.get(['darkMode', 'copyShortcut', 'fullTabShortcut']);
+            const result = await chrome.storage.sync.get(['darkMode', 'copyShortcut']);
             
             // Load dark mode setting
             if (result.darkMode) {
@@ -64,12 +60,9 @@ class AISnipPopup {
                 document.getElementById('darkModeToggle').checked = true;
             }
             
-            // Load shortcut settings
+            // Load shortcut setting
             if (result.copyShortcut) {
                 document.getElementById('shortcutInput').value = result.copyShortcut;
-            }
-            if (result.fullTabShortcut) {
-                document.getElementById('fullTabShortcutInput').value = result.fullTabShortcut;
             }
         } catch (error) {
             console.error('Error loading settings:', error);

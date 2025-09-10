@@ -54,9 +54,6 @@ class AISnipBackground {
             if (command === 'copy-locked-container') {
                 console.log('Copy locked container shortcut triggered');
                 await this.handleCopyShortcut();
-            } else if (command === 'copy-full-tab') {
-                console.log('Copy full tab shortcut triggered');
-                await this.handleFullTabShortcut();
             } else {
                 console.log('Unknown command:', command);
             }
@@ -105,29 +102,6 @@ class AISnipBackground {
         }
     }
 
-    async handleFullTabShortcut() {
-        try {
-            console.log('Keyboard shortcut triggered: copy-full-tab');
-            
-            // Get the current tab
-            const currentTab = await this.getCurrentTab();
-            console.log('Current tab for full tab shortcut:', currentTab);
-            
-            // Take full tab screenshot and copy to clipboard (no popup)
-            const result = await this.takeFullTabScreenshot(currentTab, true); // true = silent mode
-            
-            if (result && result.success) {
-                console.log('Full tab screenshot copied to clipboard via shortcut!');
-                return { success: true };
-            } else {
-                console.log('Failed to take full tab screenshot via shortcut:', result ? result.error : 'Unknown error');
-                return { success: false, error: result ? result.error : 'Unknown error' };
-            }
-        } catch (error) {
-            console.error('Error handling full tab shortcut:', error);
-            return { success: false, error: error.message };
-        }
-    }
 
     async copyScreenshotToClipboard(dataUrl) {
         try {
@@ -291,11 +265,6 @@ class AISnipBackground {
                     sendResponse(result);
                     break;
                     
-                case 'handleFullTabShortcut':
-                    console.log('Handling full tab shortcut from content script...');
-                    const shortcutResult = await this.handleFullTabShortcut();
-                    sendResponse(shortcutResult);
-                    break;
 
                 case 'analyzeScreenshot':
                     const analysis = await this.analyzeScreenshot(request.dataUrl);

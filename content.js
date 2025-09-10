@@ -133,25 +133,6 @@ class AISnipContent {
                     return;
                 }
                 
-                // Check full tab shortcut
-                const fullTabShortcut = this.parseShortcut(this.customShortcuts.fullTab);
-                if (this.isShortcutMatch(e, fullTabShortcut)) {
-                    console.log('Custom full tab shortcut detected:', this.customShortcuts.fullTab);
-                    e.preventDefault();
-                    e.stopPropagation();
-                    
-                    // Send message to background script to handle full tab shortcut
-                    chrome.runtime.sendMessage({ action: 'handleFullTabShortcut' }).then(result => {
-                        if (result && result.success) {
-                            this.showQuickNotification('Full tab screenshot copied to clipboard!');
-                        } else {
-                            console.error('Full tab shortcut failed:', result);
-                        }
-                    }).catch(error => {
-                        console.error('Error with full tab shortcut:', error);
-                    });
-                    return;
-                }
             }
             
             // Fallback to default shortcuts if custom shortcuts not loaded
@@ -172,23 +153,6 @@ class AISnipContent {
                 });
             }
             
-            // Global shortcut for copying full tab screenshot (Ctrl+Shift+F or Cmd+Shift+F)
-            if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'F') {
-                console.log('Default full tab shortcut detected: Ctrl/Cmd+Shift+F');
-                e.preventDefault();
-                e.stopPropagation();
-                
-                // Send message to background script to handle full tab shortcut
-                chrome.runtime.sendMessage({ action: 'handleFullTabShortcut' }).then(result => {
-                    if (result && result.success) {
-                        this.showQuickNotification('Full tab screenshot copied to clipboard!');
-                    } else {
-                        console.error('Full tab shortcut failed:', result);
-                    }
-                }).catch(error => {
-                    console.error('Error with full tab shortcut:', error);
-                });
-            }
         });
     }
 
@@ -944,18 +908,16 @@ class AISnipContent {
 
     async loadCustomShortcuts() {
         try {
-            const result = await chrome.storage.sync.get(['copyShortcut', 'fullTabShortcut']);
+            const result = await chrome.storage.sync.get(['copyShortcut']);
             this.customShortcuts = {
-                copyContainer: result.copyShortcut || 'Ctrl+Shift+C',
-                fullTab: result.fullTabShortcut || 'Ctrl+Shift+F'
+                copyContainer: result.copyShortcut || 'Ctrl+Shift+C'
             };
             console.log('Loaded custom shortcuts:', this.customShortcuts);
         } catch (error) {
             console.error('Error loading custom shortcuts:', error);
             // Fallback to defaults
             this.customShortcuts = {
-                copyContainer: 'Ctrl+Shift+C',
-                fullTab: 'Ctrl+Shift+F'
+                copyContainer: 'Ctrl+Shift+C'
             };
         }
     }
